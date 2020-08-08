@@ -22,8 +22,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let ftypes = fields.iter().map(|f| &f.ty).collect::<Vec<&syn::Type>>();
 
     let expanded = quote! {
-        use std::error::Error;
-
         impl #name {
             pub fn builder() -> #buildername {
                 #buildername {
@@ -45,12 +43,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 self
             })*
 
-            pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
+            pub fn build(&mut self) -> Result<#name, Box<dyn ::std::error::Error>> {
                 Ok(#name {
-                    executable: self.executable.take().ok_or("Fail")?,
-                    args: self.args.take().ok_or("Fail")?,
-                    env: self.env.take().ok_or("Fail")?,
-                    current_dir: self.current_dir.take().ok_or("Fail")?,
+                    #(#fnames: self.#fnames.take().ok_or("Fail")?),*
                 })
             }
         }
