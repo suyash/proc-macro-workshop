@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, DeriveInput};
 
-fn internal_type<'a>(args: &'a syn::PathArguments) -> Option<&'a syn::Type> {
+fn internal_type<'a>(args: &'a syn::PathArguments) -> ::std::option::Option<&'a syn::Type> {
     if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
         ref args,
         ..
@@ -10,11 +10,11 @@ fn internal_type<'a>(args: &'a syn::PathArguments) -> Option<&'a syn::Type> {
     {
         let arg = args.first().unwrap();
         if let syn::GenericArgument::Type(ref ity) = arg {
-            return Some(ity);
+            return ::std::option::Option::Some(ity);
         }
     }
 
-    None
+    ::std::option::Option::None
 }
 
 #[proc_macro_derive(Builder, attributes(builder))]
@@ -52,7 +52,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     {
                         let arg = args.first().unwrap();
                         if let syn::GenericArgument::Type(ref ity) = arg {
-                            return quote! { #ident: Option<#ity> };
+                            return quote! { #ident: ::std::option::Option<#ity> };
                         } else {
                             unimplemented!();
                         }
@@ -63,7 +63,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        quote! { #ident: Option<#ty> }
+        quote! { #ident: ::std::option::Option<#ty> }
     });
 
     let fns = fields.iter().map(|f| {
@@ -83,7 +83,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     let ity = internal_type(args).unwrap();
                     return quote! {
                         fn #ident(&mut self, #ident: #ity) -> &mut Self {
-                            self.#ident = Some(#ident);
+                            self.#ident = ::std::option::Option::Some(#ident);
                             self
                         }
                     };
@@ -111,10 +111,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                         return quote! {
                                             fn #iident(&mut self, #iident: #ity) -> &mut Self {
                                                 self.#ident = match self.#ident.take() {
-                                                    None => Some(vec![#iident]),
-                                                    Some(mut v) => {
+                                                    ::std::option::Option::None => ::std::option::Option::Some(vec![#iident]),
+                                                    ::std::option::Option::Some(mut v) => {
                                                         v.push(#iident);
-                                                        Some(v)
+                                                        ::std::option::Option::Some(v)
                                                     }
                                                 };
                                                 self
@@ -143,7 +143,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         quote! {
             fn #ident(&mut self, #ident: #ty) -> &mut Self {
-                self.#ident = Some(#ident);
+                self.#ident = ::std::option::Option::Some(#ident);
                 self
             }
         }
@@ -170,8 +170,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 if tident == "Vec" && f.attrs.len() == 1 {
                     return quote! {
                         #ident: match (self.#ident.take()) {
-                            None => vec![],
-                            Some(v) => v
+                            ::std::option::Option::None => vec![],
+                            ::std::option::Option::Some(v) => v
                         }
                     };
                 }
@@ -185,7 +185,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let build_init = fields.iter().map(|f| {
         let ident = &f.ident;
-        quote! { #ident: None }
+        quote! { #ident: ::std::option::Option::None }
     });
 
     let expanded = quote! {
@@ -204,7 +204,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl #buildername {
             #(#fns)*
 
-            pub fn build(&mut self) -> Result<#name, Box<dyn ::std::error::Error>> {
+            pub fn build(&mut self) -> ::std::result::Result<#name, ::std::boxed::Box<dyn ::std::error::Error>> {
                 Ok(#name {
                     #(#build_args),*
                 })
