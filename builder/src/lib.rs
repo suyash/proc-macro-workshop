@@ -1,6 +1,5 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::spanned::Spanned;
 use syn::{parse_macro_input, DeriveInput};
 
 fn internal_type<'a>(args: &'a syn::PathArguments) -> Option<&'a syn::Type> {
@@ -122,8 +121,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
                                             }
                                         };
                                     } else {
-                                        let err = syn::Error::new(
-                                            ml.path.span().join(ml.paren_token.span).unwrap(),
+                                        let err = syn::Error::new_spanned(
+                                            ml,
                                             "expected `builder(each = \"...\")`",
                                         );
                                         return err.to_compile_error();
