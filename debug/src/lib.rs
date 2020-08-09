@@ -24,10 +24,20 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 "{:?}".to_owned()
             });
 
-            add_trait_bounds(&mut inp.generics, named);
+            let attrs = &inp.attrs;
 
-            let (impl_generics, ty_generics, where_clause) = inp.generics.split_for_impl();
+            let g_where_clause: Option<syn::WhereClause> = build_where_clause(attrs);
+
+            add_trait_bounds(&mut inp.generics, named, g_where_clause.as_ref());
+
+            let (impl_generics, ty_generics, p_where_clause) = inp.generics.split_for_impl();
             let ident = &inp.ident;
+
+            let where_clause = if p_where_clause.is_none() {
+                g_where_clause.as_ref()
+            } else {
+                p_where_clause
+            };
 
             quote! {
                 impl #impl_generics ::std::fmt::Debug for #ident #ty_generics #where_clause {
@@ -49,6 +59,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 fn add_trait_bounds(
     generics: &mut syn::Generics,
     fields: &Punctuated<syn::Field, syn::token::Comma>,
+    g_where_clause: Option<&syn::WhereClause>,
 ) {
     let where_token = syn::token::Where {
         span: generics.span(),
@@ -61,6 +72,8 @@ fn add_trait_bounds(
 
                 for field in fields {
                     let ty = &field.ty;
+
+                    // handle multi segmented types
                     if let syn::Type::Path(syn::TypePath {
                         path: syn::Path { ref segments, .. },
                         ..
@@ -98,6 +111,11 @@ fn add_trait_bounds(
                                             });
 
                                             found = true;
+                                        } else if segments.len() == 1 {
+                                            let seg = &segments[0];
+                                            let ident = &seg.ident;
+                                            found =
+                                                found || check_global_bounds(ident, g_where_clause);
                                         }
                                     }
                                 }
@@ -112,6 +130,25 @@ fn add_trait_bounds(
             }
         }
     }
+}
+
+fn check_global_bounds(ident: &syn::Ident, where_clause: Option<&syn::WhereClause>) -> bool {
+    if let Some(clause) = where_clause {
+        let pred = &clause.predicates[0];
+        if let syn::WherePredicate::Type(syn::PredicateType {
+            bounded_ty:
+                syn::Type::Path(syn::TypePath {
+                    path: syn::Path { ref segments, .. },
+                    ..
+                }),
+            ..
+        }) = pred
+        {
+            let seg = &segments[0];
+            return ident == &seg.ident;
+        }
+    }
+    false
 }
 
 fn check(ident: &syn::Ident, fields: &Punctuated<syn::Field, syn::token::Comma>) -> bool {
@@ -151,4 +188,34 @@ fn check(ident: &syn::Ident, fields: &Punctuated<syn::Field, syn::token::Comma>)
     }
 
     true
+}
+
+fn build_where_clause(attrs: &Vec<syn::Attribute>) -> Option<syn::WhereClause> {
+    if attrs.len() == 1 {
+        let att = &attrs[0];
+        let meta = att.parse_meta().unwrap();
+        if let syn::Meta::List(syn::MetaList { ref nested, .. }) = meta {
+            if nested.len() == 1 {
+                if let syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
+                    lit: syn::Lit::Str(ref litstr),
+                    ..
+                })) = nested[0]
+                {
+                    let parse: syn::WherePredicate = litstr.parse().unwrap();
+                    let where_token = syn::token::Where { span: parse.span() };
+                    let mut predicates: Punctuated<syn::WherePredicate, syn::token::Comma> =
+                        Punctuated::new();
+                    predicates.push_value(parse);
+
+                    let g_where_clause = syn::WhereClause {
+                        where_token,
+                        predicates,
+                    };
+
+                    return Some(g_where_clause);
+                }
+            }
+        }
+    }
+    None
 }
