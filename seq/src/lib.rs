@@ -1,7 +1,7 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Group, TokenStream as TokenStream2, TokenTree as TokenTree2};
+use proc_macro2::{Group, Literal, TokenStream as TokenStream2, TokenTree as TokenTree2};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Ident, LitInt, Result, Token,
@@ -33,33 +33,95 @@ impl Parse for SeqInput {
     }
 }
 
+impl SeqInput {
+    fn expand(&self, stream: TokenStream2, index: u64) -> TokenStream2 {
+        let mut iter = stream.into_iter();
+        let mut v = Vec::new();
+
+        let mut ids = None;
+        let mut idp = None;
+
+        loop {
+            match iter.next() {
+                None => break,
+                Some(tt) => match tt {
+                    TokenTree2::Group(g) => {
+                        if ids.is_some() {
+                            v.push(TokenTree2::Ident(ids.unwrap()));
+                            ids = None;
+                        }
+
+                        if idp.is_some() {
+                            v.push(TokenTree2::Punct(idp.unwrap()));
+                            idp = None;
+                        }
+
+                        v.push(TokenTree2::Group(Group::new(
+                            g.delimiter(),
+                            self.expand(g.stream(), index),
+                        )));
+                    }
+                    TokenTree2::Ident(ident) => {
+                        if &ident == &self.name && ids.is_some() && idp.is_some() {
+                            let s = format!("{}{}", ids.unwrap(), index);
+                            v.push(TokenTree2::Ident(Ident::new(s.as_str(), ident.span())));
+
+                            ids = None;
+                            idp = None;
+                            
+                            continue;
+                        }
+
+                        if &ident == &self.name {
+                            v.push(TokenTree2::Literal(Literal::u64_unsuffixed(index)));
+                        } else {
+                            if ids.is_some() {
+                                v.push(TokenTree2::Ident(ids.unwrap()));
+                            }
+
+                            ids = Some(ident);
+                        }
+                    }
+                    TokenTree2::Punct(punct) => {
+                        if punct.as_char() == '#' && ids.is_some() && idp.is_none() {
+                            idp = Some(punct);
+                        } else {
+                            if ids.is_some() {
+                                v.push(TokenTree2::Ident(ids.unwrap()));
+                                ids = None;
+                            }
+
+                            if idp.is_some() {
+                                v.push(TokenTree2::Punct(idp.unwrap()));
+                                idp = None;
+                            }
+
+                            v.push(TokenTree2::Punct(punct));
+                        }
+                    }
+                    tt => v.push(tt),
+                },
+            }
+        }
+
+        v.into_iter().collect()
+    }
+}
+
+impl Into<TokenStream2> for SeqInput {
+    fn into(self) -> TokenStream2 {
+        let start = self.start.base10_parse::<u64>().unwrap();
+        let end = self.end.base10_parse::<u64>().unwrap();
+
+        (start..end)
+            .map(|i| self.expand(self.body.stream(), i))
+            .collect::<TokenStream2>()
+    }
+}
+
 #[proc_macro]
 pub fn seq(input: TokenStream) -> TokenStream {
     let inp = parse_macro_input!(input as SeqInput);
-    let stream = &inp.body.stream();
-
-    (inp.start.base10_parse::<u64>().unwrap()..inp.end.base10_parse::<u64>().unwrap())
-        .map(|i| expand(stream.clone(), &inp.name, i))
-        .collect::<TokenStream2>()
-        .into()
-}
-
-fn expand(stream: TokenStream2, f: &Ident, index: u64) -> TokenStream2 {
-    stream
-        .into_iter()
-        .map(|tt| expand_tree(tt, f, index))
-        .collect()
-}
-
-fn expand_tree(tt: TokenTree2, f: &Ident, index: u64) -> TokenTree2 {
-    match tt {
-        TokenTree2::Group(g) => {
-            let exp = Group::new(g.delimiter(), expand(g.stream(), f, index));
-            TokenTree2::Group(exp)
-        }
-        TokenTree2::Ident(ident) if &ident == f => {
-            TokenTree2::Literal(proc_macro2::Literal::u64_unsuffixed(index))
-        }
-        tt => tt,
-    }
+    let ans: TokenStream2 = inp.into();
+    TokenStream::from(ans)
 }
