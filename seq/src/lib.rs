@@ -38,70 +38,75 @@ impl SeqInput {
         let mut iter = stream.into_iter();
         let mut v = Vec::new();
 
-        let mut ids = None;
-        let mut idp = None;
+        let mut last2 = None;
+        let mut last1 = None;
 
         loop {
             match iter.next() {
                 None => break,
-                Some(tt) => match tt {
-                    TokenTree2::Group(g) => {
-                        if ids.is_some() {
-                            v.push(TokenTree2::Ident(ids.unwrap()));
-                            ids = None;
+                Some(tt) => {
+                    let rtt = match &tt {
+                        TokenTree2::Group(ref group) => TokenTree2::Group(Group::new(
+                            group.delimiter(),
+                            self.expand(group.stream(), index),
+                        )),
+                        TokenTree2::Ident(ref ident) => {
+                            if ident == &self.name {
+                                TokenTree2::Literal(Literal::u64_unsuffixed(index))
+                            } else {
+                                TokenTree2::Ident(ident.clone())
+                            }
                         }
+                        tt => tt.clone(),
+                    };
 
-                        if idp.is_some() {
-                            v.push(TokenTree2::Punct(idp.unwrap()));
-                            idp = None;
-                        }
-
-                        v.push(TokenTree2::Group(Group::new(
-                            g.delimiter(),
-                            self.expand(g.stream(), index),
-                        )));
+                    if last1.is_none() {
+                        last1 = Some(rtt);
+                        continue;
                     }
-                    TokenTree2::Ident(ident) => {
-                        if &ident == &self.name && ids.is_some() && idp.is_some() {
-                            let s = format!("{}{}", ids.unwrap(), index);
-                            v.push(TokenTree2::Ident(Ident::new(s.as_str(), ident.span())));
 
-                            ids = None;
-                            idp = None;
-                            
-                            continue;
-                        }
+                    if let TokenTree2::Ident(ref oident) = &tt {
+                        if oident == &self.name {
+                            if last2.is_some() && last1.is_some() {
+                                let ll2 = last2.as_ref().unwrap();
+                                let ll1 = last1.as_ref().unwrap();
 
-                        if &ident == &self.name {
-                            v.push(TokenTree2::Literal(Literal::u64_unsuffixed(index)));
-                        } else {
-                            if ids.is_some() {
-                                v.push(TokenTree2::Ident(ids.unwrap()));
+                                if let TokenTree2::Ident(ref ident) = ll2 {
+                                    if let TokenTree2::Punct(ref punct) = ll1 {
+                                        if punct.as_char() == '#' {
+                                            let idname = format!("{}{}", ident, index);
+                                            v.push(TokenTree2::Ident(Ident::new(
+                                                idname.as_str(),
+                                                ident.span(),
+                                            )));
+
+                                            last2 = None;
+                                            last1 = None;
+
+                                            continue;
+                                        }
+                                    }
+                                }
                             }
-
-                            ids = Some(ident);
-                        }
-                    }
-                    TokenTree2::Punct(punct) => {
-                        if punct.as_char() == '#' && ids.is_some() && idp.is_none() {
-                            idp = Some(punct);
-                        } else {
-                            if ids.is_some() {
-                                v.push(TokenTree2::Ident(ids.unwrap()));
-                                ids = None;
-                            }
-
-                            if idp.is_some() {
-                                v.push(TokenTree2::Punct(idp.unwrap()));
-                                idp = None;
-                            }
-
-                            v.push(TokenTree2::Punct(punct));
                         }
                     }
-                    tt => v.push(tt),
-                },
+
+                    if last2.is_some() {
+                        v.push(last2.unwrap());
+                    }
+
+                    last2 = last1;
+                    last1 = Some(rtt);
+                }
             }
+        }
+
+        if last2.is_some() {
+            v.push(last2.unwrap());
+        }
+
+        if last1.is_some() {
+            v.push(last1.unwrap());
         }
 
         v.into_iter().collect()
