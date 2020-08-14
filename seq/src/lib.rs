@@ -1,9 +1,11 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use proc_macro2::Group;
-use syn::{Result, Ident, Token, LitInt, parse_macro_input, parse::{ParseStream, Parse}};
-use quote::quote;
+use proc_macro2::{Group, TokenStream as TokenStream2, TokenTree as TokenTree2};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Ident, LitInt, Result, Token,
+};
 
 #[derive(Debug)]
 struct SeqInput {
@@ -22,9 +24,9 @@ impl Parse for SeqInput {
         let end: LitInt = input.parse()?;
         let body: Group = input.parse()?;
 
-        Ok(SeqInput{
+        Ok(SeqInput {
             name,
-            start, 
+            start,
             end,
             body,
         })
@@ -33,9 +35,31 @@ impl Parse for SeqInput {
 
 #[proc_macro]
 pub fn seq(input: TokenStream) -> TokenStream {
-    let _ = parse_macro_input!(input as SeqInput);
+    let inp = parse_macro_input!(input as SeqInput);
+    let stream = &inp.body.stream();
 
-    let ans = quote!{};
+    (inp.start.base10_parse::<u64>().unwrap()..inp.end.base10_parse::<u64>().unwrap())
+        .map(|i| expand(stream.clone(), &inp.name, i))
+        .collect::<TokenStream2>()
+        .into()
+}
 
-    TokenStream::from(ans)
+fn expand(stream: TokenStream2, f: &Ident, index: u64) -> TokenStream2 {
+    stream
+        .into_iter()
+        .map(|tt| expand_tree(tt, f, index))
+        .collect()
+}
+
+fn expand_tree(tt: TokenTree2, f: &Ident, index: u64) -> TokenTree2 {
+    match tt {
+        TokenTree2::Group(g) => {
+            let exp = Group::new(g.delimiter(), expand(g.stream(), f, index));
+            TokenTree2::Group(exp)
+        }
+        TokenTree2::Ident(ident) if &ident == f => {
+            TokenTree2::Literal(proc_macro2::Literal::u64_unsuffixed(index))
+        }
+        tt => tt,
+    }
 }
