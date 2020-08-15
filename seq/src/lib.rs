@@ -1,7 +1,9 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use proc_macro2::{Group, Literal, Delimiter, TokenStream as TokenStream2, TokenTree as TokenTree2};
+use proc_macro2::{
+    Delimiter, Group, Literal, TokenStream as TokenStream2, TokenTree as TokenTree2,
+};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, Ident, LitInt, Result, Token,
@@ -21,11 +23,18 @@ impl Parse for SeqInput {
         let _: Token![in] = input.parse()?;
         let start: LitInt = input.parse()?;
         let _: Token![..] = input.parse()?;
+
+        let res: Result<Token![=]> = input.parse();
+
         let end: LitInt = input.parse()?;
         let body: Group = input.parse()?;
 
         let start = start.base10_parse::<u64>().unwrap();
-        let end = end.base10_parse::<u64>().unwrap();
+        let mut end = end.base10_parse::<u64>().unwrap();
+
+        if res.is_ok() {
+            end += 1;
+        }
 
         Ok(SeqInput {
             name,
@@ -69,7 +78,12 @@ impl SeqInput {
                         TokenTree2::Punct(ref punct) if punct.as_char() == '*' => {
                             if last2.is_some() && last1.is_some() {
                                 match (last2.as_ref().unwrap(), last1.as_ref().unwrap()) {
-                                    (TokenTree2::Punct(ref punct2), TokenTree2::Group(ref group)) if punct2.as_char() == '#' && group.delimiter() == Delimiter::Parenthesis => {
+                                    (
+                                        TokenTree2::Punct(ref punct2),
+                                        TokenTree2::Group(ref group),
+                                    ) if punct2.as_char() == '#'
+                                        && group.delimiter() == Delimiter::Parenthesis =>
+                                    {
                                         repeated = true;
 
                                         let pt = (self.start..self.end)
@@ -152,19 +166,20 @@ impl SeqInput {
                                 let ll1 = last1.as_ref().unwrap();
 
                                 match (ll2, ll1) {
-                                    (TokenTree2::Ident(ref ident), TokenTree2::Punct(ref punct)) => {
-                                        if punct.as_char() == '#' {
-                                            let idname = format!("{}{}", ident, index);
-                                            v.push(TokenTree2::Ident(Ident::new(
-                                                idname.as_str(),
-                                                ident.span(),
-                                            )));
+                                    (
+                                        TokenTree2::Ident(ref ident),
+                                        TokenTree2::Punct(ref punct),
+                                    ) if punct.as_char() == '#' => {
+                                        let idname = format!("{}{}", ident, index);
+                                        v.push(TokenTree2::Ident(Ident::new(
+                                            idname.as_str(),
+                                            ident.span(),
+                                        )));
 
-                                            last2 = None;
-                                            last1 = None;
+                                        last2 = None;
+                                        last1 = None;
 
-                                            continue;
-                                        }
+                                        continue;
                                     }
                                     _ => {}
                                 }
