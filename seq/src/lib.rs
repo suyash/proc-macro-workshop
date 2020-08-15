@@ -71,8 +71,8 @@ impl SeqInput {
                                 let ll2 = last2.as_ref().unwrap();
                                 let ll1 = last1.as_ref().unwrap();
 
-                                if let TokenTree2::Ident(ref ident) = ll2 {
-                                    if let TokenTree2::Punct(ref punct) = ll1 {
+                                match (ll2, ll1) {
+                                    (TokenTree2::Ident(ref ident), TokenTree2::Punct(ref punct)) => {
                                         if punct.as_char() == '#' {
                                             let idname = format!("{}{}", ident, index);
                                             v.push(TokenTree2::Ident(Ident::new(
@@ -86,6 +86,7 @@ impl SeqInput {
                                             continue;
                                         }
                                     }
+                                    _ => {}
                                 }
                             }
                         }
