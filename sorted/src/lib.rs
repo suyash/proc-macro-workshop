@@ -60,13 +60,11 @@ impl VisitMut for Check {
             if node.arms.len() > 1 {
                 let mut v = vec![&node.arms[0].pat];
 
-                for arm in node.arms.iter().skip(1) {
+                'outer: for (ix, arm) in node.arms.iter().skip(1).enumerate() {
                     let pat = &arm.pat;
 
                     match (v.last().unwrap(), pat) {
                         (Pat::TupleStruct(ref first), Pat::TupleStruct(ref second)) => {
-                            println!("{:#?}", second);
-
                             let s1 = &first.path.segments;
                             let s2 = &second.path.segments;
 
@@ -84,10 +82,31 @@ impl VisitMut for Check {
                                     let msg = format!("{} should sort before {}", &cs2[2..], &cs1[2..]);
                                     let err = Error::new_spanned(&s2, msg.as_str());
                                     self.err = Some(err);
+                                    break 'outer;
                                 }
                             }
                         },
-                        _ => {}
+                        (Pat::Ident(ref first), Pat::Ident(ref second)) => {
+                            if first.ident > second.ident {
+                                let msg = format!("{} should sort before {}", first.ident, second.ident);
+                                let err = Error::new_spanned(&second.ident, msg.as_str());
+                                self.err = Some(err);
+                                break 'outer;
+                            }
+                        }
+                        (_, Pat::Wild(ref pat)) => {
+                            if ix != node.arms.len() - 2 {
+                                let err = Error::new_spanned(&pat, "Expected Wildcard to appear at the end");
+                                self.err = Some(err);
+                                break 'outer;
+                            }
+                        }
+                        _ => {
+                            println!("{:?}", pat);
+                            let err = Error::new_spanned(&v.last().unwrap(), "unsupported by #[sorted]");
+                            self.err = Some(err);
+                            break 'outer;
+                        }
                     }
 
                     v.push(&pat);
