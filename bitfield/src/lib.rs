@@ -12,4 +12,15 @@
 // (macro, trait, struct) through the one bitfield crate.
 pub use bitfield_impl::bitfield;
 
-// TODO other things
+pub use bitfield_impl::bitfield_type;
+
+use seq::seq;
+
+pub trait Specifier {
+    const BITS: usize;
+}
+
+seq!(N in 1..=64 {
+    bitfield_type!(N);
+});
+
