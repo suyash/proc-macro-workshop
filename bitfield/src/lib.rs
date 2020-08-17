@@ -28,9 +28,22 @@ pub mod checks {
 }
 
 pub trait Specifier {
+    type HoldType;
     const BITS: usize;
 }
 
-seq!(N in 1..=64 {
-    bitfield_type!(N);
+seq!(N in 1..=8 {
+    bitfield_type!(N, u8);
+});
+
+seq!(N in 9..=16 {
+    bitfield_type!(N, u16);
+});
+
+seq!(N in 17..=32 {
+    bitfield_type!(N, u32);
+});
+
+seq!(N in 33..=64 {
+    bitfield_type!(N, u64);
 });

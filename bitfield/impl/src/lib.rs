@@ -6,7 +6,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
 use syn::{
     parse_macro_input, parse_quote, ExprPath, Fields, FieldsNamed, Ident, ItemStruct, LitInt, Path,
-    Type, TypePath,
+    Token, Type, TypePath, parse::{Parse, ParseStream}, Result
 };
 
 #[proc_macro_attribute]
@@ -27,6 +27,26 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                 {
                     let i = &segments[0].ident;
                     parse_quote! { <#i as Specifier>::BITS }
+                } else {
+                    unimplemented!()
+                }
+            })
+            .collect()
+    } else {
+        unimplemented!()
+    };
+
+    let hold_types: Vec<Type> = if let Fields::Named(FieldsNamed { ref named, .. }) = &item.fields {
+        named
+            .iter()
+            .map(|f| {
+                if let Type::Path(TypePath {
+                    path: Path { ref segments, .. },
+                    ..
+                }) = &f.ty
+                {
+                    let i = &segments[0].ident;
+                    parse_quote! { <#i as Specifier>::HoldType }
                 } else {
                     unimplemented!()
                 }
@@ -83,19 +103,19 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            #(pub fn #get_names(&self) -> u64 {
+            #(pub fn #get_names(&self) -> #hold_types {
                 let start = #(#starts)+*;
                 let end = #(#ends)+*;
 
-                self.get(start, end)
+                self.get(start, end) as #hold_types
             })*
 
-            #(pub fn #set_names(&mut self, v: u64) {
+            #(pub fn #set_names(&mut self, v: #hold_types) {
                 let start = #(#starts)+*;
                 let end = #(#ends)+*;
                 let size = #sizes;
 
-                self.set(v, start, end, size)
+                self.set(v as u64, start, end, size)
             })*
 
             fn get(&self, start: usize, end: usize) -> u64 {
@@ -162,9 +182,31 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(stream)
 }
 
+struct TypeParams {
+    size: LitInt,
+    ty: Type
+}
+
+impl Parse for TypeParams {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let size: LitInt = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let ty: Type = input.parse()?;
+
+        Ok(TypeParams {
+            size,
+            ty
+        })
+    }
+}
+
 #[proc_macro]
 pub fn bitfield_type(input: TokenStream) -> TokenStream {
-    let val = parse_macro_input!(input as LitInt);
+    let params = parse_macro_input!(input as TypeParams);
+
+    let val = &params.size;
+    let ty = &params.ty;
+
     let name = format!("B{}", val);
     let ident = Ident::new(name.as_str(), val.span());
 
@@ -173,6 +215,7 @@ pub fn bitfield_type(input: TokenStream) -> TokenStream {
 
         impl crate::Specifier for #ident {
             const BITS: usize = #val;
+            type HoldType = #ty;
         }
     };
 
