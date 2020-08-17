@@ -26,6 +26,14 @@ pub mod checks {
     pub trait TotalSizeIsMultipleOfEightBits {}
 
     impl TotalSizeIsMultipleOfEightBits for PhantomData<[(); 0]> {}
+
+    pub trait CheckDiscriminantInRange<T> where Self::Type: DiscriminantInRange {
+        type Type;
+    }
+
+    pub trait DiscriminantInRange {}
+
+    impl DiscriminantInRange for PhantomData<[(); 1]> {}
 }
 
 pub trait Specifier {

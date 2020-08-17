@@ -2,12 +2,14 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 
-use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, ToTokens};
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use quote::{quote, quote_spanned, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, parse_quote, Data, DeriveInput, ExprPath, Fields, FieldsNamed, Ident,
-    ItemStruct, LitInt, Path, Result, Token, Type, TypePath,
+    parse_macro_input, parse_quote,
+    spanned::Spanned,
+    Data, DeriveInput, Error, ExprPath, Fields, FieldsNamed, Ident, ItemStruct, LitInt, Path,
+    Result, Token, Type, TypePath,
 };
 
 #[proc_macro_attribute]
@@ -239,14 +241,24 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let inp = parse_macro_input!(input as DeriveInput);
 
     if let DeriveInput {
-        ident,
-        data: Data::Enum(data),
+        ref ident,
+        data: Data::Enum(ref data),
         ..
-    } = inp
+    } = &inp
     {
-        let bits = data.variants.len().trailing_zeros() as usize;
+        let len = data.variants.len();
 
-        let variants: Vec<TokenStream2> = data
+        if !len.is_power_of_two() {
+            let stream = Error::new(
+                Span::call_site(),
+                "BitfieldSpecifier expected a number of variants which is a power of 2",
+            );
+            return TokenStream::from(stream.to_compile_error());
+        }
+
+        let bits = len.trailing_zeros() as usize;
+
+        let variant_conditions: Vec<TokenStream2> = data
             .variants
             .iter()
             .map(|v| {
@@ -255,13 +267,22 @@ pub fn derive(input: TokenStream) -> TokenStream {
             })
             .collect();
 
+        let variants: Vec<TokenStream2> = data.variants.iter().map(|v| {
+            let vident = &v.ident;
+            let span = v.span();
+            quote_spanned!{ span => impl bitfield::checks::CheckDiscriminantInRange<[(); #ident::#vident as usize]> for #ident {
+                    type Type = std::marker::PhantomData<[(); ((#ident::#vident as usize) < (1 << #bits)) as usize]>;
+                }
+            }
+        }).collect();
+
         let ans = quote! {
             impl bitfield::Specifier for #ident {
                 const BITS: usize = #bits;
                 type HoldType = #ident;
 
                 fn to_hold(v: u64) -> Self::HoldType {
-                    #(#variants)*
+                    #(#variant_conditions)*
 
                     unimplemented!()
                 }
@@ -270,6 +291,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
                     v as u64
                 }
             }
+
+            #(#variants)*
         };
 
         TokenStream::from(ans)
