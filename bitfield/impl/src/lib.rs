@@ -180,7 +180,7 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                         }
 
                         if ep > 0 {
-                            self.data[ei] = (((1 << ep) - 1) & v) as u8;
+                            self.data[ei] = (((((1 << ep) - 1) & v) << (8 - ep)) as u64 | (((1 << (8 - ep)) - 1) & self.data[ei]) as u64) as u8;
                         }
                     }
                 }
