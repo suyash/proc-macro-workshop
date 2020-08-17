@@ -7,7 +7,7 @@ use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote, Data, DeriveInput, ExprPath, Fields, FieldsNamed, Ident,
-    ItemStruct, LitInt, Path, Result, Token, Type, TypePath,Arm
+    ItemStruct, LitInt, Path, Result, Token, Type, TypePath,
 };
 
 #[proc_macro_attribute]
@@ -246,19 +246,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
     {
         let bits = data.variants.len().trailing_zeros() as usize;
 
-        let mut arms: Vec<Arm> = data.variants.iter().enumerate().map(|(ix, v)| {
-            let aident = &v.ident;
-            let l = proc_macro2::Literal::usize_unsuffixed(ix);
-            parse_quote!(#l => #ident::#aident)
-        }).collect();
-
-        let arms_rev: Vec<Arm> = data.variants.iter().enumerate().map(|(ix, v)| {
-            let aident = &v.ident;
-            let l = proc_macro2::Literal::usize_unsuffixed(ix);
-            parse_quote!(#ident::#aident => #l)
-        }).collect();
-
-        arms.push(parse_quote!{_ => unimplemented!()});
+        let variants: Vec<TokenStream2> = data
+            .variants
+            .iter()
+            .map(|v| {
+                let aident = &v.ident;
+                parse_quote!(if #ident::#aident as u64 == v { return #ident::#aident; })
+            })
+            .collect();
 
         let ans = quote! {
             impl bitfield::Specifier for #ident {
@@ -266,15 +261,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 type HoldType = #ident;
 
                 fn to_hold(v: u64) -> Self::HoldType {
-                    match v {
-                        #(#arms),*
-                    }
+                    #(#variants)*
+
+                    unimplemented!()
                 }
 
                 fn from_hold(v: Self::HoldType) -> u64 {
-                    match v {
-                        #(#arms_rev),*
-                    }
+                    v as u64
                 }
             }
         };
