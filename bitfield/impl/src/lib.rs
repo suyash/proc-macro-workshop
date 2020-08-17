@@ -5,8 +5,9 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
 use syn::{
-    parse_macro_input, parse_quote, ExprPath, Fields, FieldsNamed, Ident, ItemStruct, LitInt, Path,
-    Token, Type, TypePath, parse::{Parse, ParseStream}, Result
+    parse::{Parse, ParseStream},
+    parse_macro_input, parse_quote, Data, DeriveInput, ExprPath, Fields, FieldsNamed, Ident,
+    ItemStruct, LitInt, Path, Result, Token, Type, TypePath,Arm
 };
 
 #[proc_macro_attribute]
@@ -15,6 +16,12 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
 
     let vis = &item.vis;
     let ident = &item.ident;
+
+    let types: Vec<&Type> = if let Fields::Named(FieldsNamed { ref named, .. }) = &item.fields {
+        named.iter().map(|f| &f.ty).collect()
+    } else {
+        unimplemented!()
+    };
 
     let sizes: Vec<ExprPath> = if let Fields::Named(FieldsNamed { ref named, .. }) = &item.fields {
         named
@@ -107,7 +114,7 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let start = #(#starts)+*;
                 let end = #(#ends)+*;
 
-                self.get(start, end) as #hold_types
+                #types::to_hold(self.get(start, end))
             })*
 
             #(pub fn #set_names(&mut self, v: #hold_types) {
@@ -115,7 +122,7 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                 let end = #(#ends)+*;
                 let size = #sizes;
 
-                self.set(v as u64, start, end, size)
+                self.set(#types::from_hold(v), start, end, size)
             })*
 
             fn get(&self, start: usize, end: usize) -> u64 {
@@ -184,7 +191,7 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
 
 struct TypeParams {
     size: LitInt,
-    ty: Type
+    ty: Type,
 }
 
 impl Parse for TypeParams {
@@ -193,10 +200,7 @@ impl Parse for TypeParams {
         let _: Token![,] = input.parse()?;
         let ty: Type = input.parse()?;
 
-        Ok(TypeParams {
-            size,
-            ty
-        })
+        Ok(TypeParams { size, ty })
     }
 }
 
@@ -216,8 +220,67 @@ pub fn bitfield_type(input: TokenStream) -> TokenStream {
         impl crate::Specifier for #ident {
             const BITS: usize = #val;
             type HoldType = #ty;
+
+            fn to_hold(v: u64) -> Self::HoldType {
+                v as Self::HoldType
+            }
+
+            fn from_hold(v: Self::HoldType) -> u64 {
+                v as u64
+            }
         }
     };
 
     stream.into()
+}
+
+#[proc_macro_derive(BitfieldSpecifier)]
+pub fn derive(input: TokenStream) -> TokenStream {
+    let inp = parse_macro_input!(input as DeriveInput);
+
+    if let DeriveInput {
+        ident,
+        data: Data::Enum(data),
+        ..
+    } = inp
+    {
+        let bits = data.variants.len().trailing_zeros() as usize;
+
+        let mut arms: Vec<Arm> = data.variants.iter().enumerate().map(|(ix, v)| {
+            let aident = &v.ident;
+            let l = proc_macro2::Literal::usize_unsuffixed(ix);
+            parse_quote!(#l => #ident::#aident)
+        }).collect();
+
+        let arms_rev: Vec<Arm> = data.variants.iter().enumerate().map(|(ix, v)| {
+            let aident = &v.ident;
+            let l = proc_macro2::Literal::usize_unsuffixed(ix);
+            parse_quote!(#ident::#aident => #l)
+        }).collect();
+
+        arms.push(parse_quote!{_ => unimplemented!()});
+
+        let ans = quote! {
+            impl bitfield::Specifier for #ident {
+                const BITS: usize = #bits;
+                type HoldType = #ident;
+
+                fn to_hold(v: u64) -> Self::HoldType {
+                    match v {
+                        #(#arms),*
+                    }
+                }
+
+                fn from_hold(v: Self::HoldType) -> u64 {
+                    match v {
+                        #(#arms_rev),*
+                    }
+                }
+            }
+        };
+
+        TokenStream::from(ans)
+    } else {
+        unimplemented!()
+    }
 }

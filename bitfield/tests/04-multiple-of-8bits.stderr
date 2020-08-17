@@ -4,9 +4,9 @@ error[E0277]: the trait bound `std::marker::PhantomData<[(); 7]>: bitfield::chec
 53 | #[bitfield]
    | ^^^^^^^^^^^ the trait `bitfield::checks::TotalSizeIsMultipleOfEightBits` is not implemented for `std::marker::PhantomData<[(); 7]>`
    |
-  ::: $WORKSPACE/bitfield/src/lib.rs:21:69
+  ::: $WORKSPACE/bitfield/src/lib.rs:22:69
    |
-21 |     pub trait CheckTotalSizeIsMultipleOfEightBits where Self::Size: TotalSizeIsMultipleOfEightBits {
+22 |     pub trait CheckTotalSizeIsMultipleOfEightBits where Self::Size: TotalSizeIsMultipleOfEightBits {
    |                                                                     ------------------------------ required by this bound in `bitfield::checks::CheckTotalSizeIsMultipleOfEightBits`
    |
    = help: the following implementations were found:

@@ -14,6 +14,7 @@ use seq::seq;
 
 pub use bitfield_impl::bitfield;
 pub use bitfield_impl::bitfield_type;
+pub use bitfield_impl::BitfieldSpecifier;
 
 pub mod checks {
     use std::marker::PhantomData;
@@ -30,6 +31,22 @@ pub mod checks {
 pub trait Specifier {
     type HoldType;
     const BITS: usize;
+
+    fn to_hold(v: u64) -> Self::HoldType;
+    fn from_hold(v: Self::HoldType) -> u64;
+}
+
+impl Specifier for bool {
+    type HoldType = bool;
+    const BITS: usize = 1;
+
+    fn to_hold(v: u64) -> Self::HoldType {
+        v & 1 == 1
+    }
+
+    fn from_hold(v: Self::HoldType) -> u64 {
+        v as u64
+    }
 }
 
 seq!(N in 1..=8 {
