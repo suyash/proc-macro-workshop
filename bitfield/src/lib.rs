@@ -10,11 +10,10 @@
 //
 // From the perspective of a user of this crate, they get all the necessary APIs
 // (macro, trait, struct) through the one bitfield crate.
-pub use bitfield_impl::bitfield;
-
-pub use bitfield_impl::bitfield_type;
-
 use seq::seq;
+
+pub use bitfield_impl::bitfield;
+pub use bitfield_impl::bitfield_type;
 
 pub trait Specifier {
     const BITS: usize;
@@ -23,4 +22,3 @@ pub trait Specifier {
 seq!(N in 1..=64 {
     bitfield_type!(N);
 });
-
