@@ -34,6 +34,10 @@ pub mod checks {
     pub trait DiscriminantInRange {}
 
     impl DiscriminantInRange for PhantomData<[(); 1]> {}
+
+    pub struct BitsCheck<C> {
+        pub data: C
+    }
 }
 
 pub trait Specifier {
