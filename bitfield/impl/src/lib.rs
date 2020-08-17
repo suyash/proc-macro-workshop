@@ -72,6 +72,10 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
             data: [u8; (#(#sizes)+*) / 8],
         }
 
+        impl bitfield::checks::CheckTotalSizeIsMultipleOfEightBits for #ident {
+            type Size = std::marker::PhantomData<[(); (#(#sizes)+*) % 8]>;
+        }
+
         impl #ident {
             pub fn new() -> #ident {
                 #ident {

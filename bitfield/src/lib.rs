@@ -15,6 +15,18 @@ use seq::seq;
 pub use bitfield_impl::bitfield;
 pub use bitfield_impl::bitfield_type;
 
+pub mod checks {
+    use std::marker::PhantomData;
+
+    pub trait CheckTotalSizeIsMultipleOfEightBits where Self::Size: TotalSizeIsMultipleOfEightBits {
+        type Size;
+    }
+
+    pub trait TotalSizeIsMultipleOfEightBits {}
+
+    impl TotalSizeIsMultipleOfEightBits for PhantomData<[(); 0]> {}
+}
+
 pub trait Specifier {
     const BITS: usize;
 }
